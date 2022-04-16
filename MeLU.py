@@ -13,33 +13,38 @@ class user_preference_estimator(torch.nn.Module):
     def __init__(self, config):
         super(user_preference_estimator, self).__init__()
         self.embedding_dim = config['embedding_dim']
-        self.fc1_in_dim = config['embedding_dim'] * 8
+        self.fc1_in_dim = config['embedding_dim'] * 4
         self.fc2_in_dim = config['first_fc_hidden_dim']
         self.fc2_out_dim = config['second_fc_hidden_dim']
+        self.fc3_in_dim= config['second_fc_hidden_dim']
+        self.fc3_out_dim = config['third_fc_hidden_dim']
         self.use_cuda = config['use_cuda']
 
         self.item_emb = item(config)
         self.user_emb = user(config)
         self.fc1 = torch.nn.Linear(self.fc1_in_dim, self.fc2_in_dim)
         self.fc2 = torch.nn.Linear(self.fc2_in_dim, self.fc2_out_dim)
-        self.linear_out = torch.nn.Linear(self.fc2_out_dim, 1)
+        self.fc3 = torch.nn.Linear(self.fc3_in_dim,self.fc3_out_dim)
+        self.linear_out = torch.nn.Linear(self.fc3_out_dim, 1)
 
     def forward(self, x, training = True):
         rate_idx = Variable(x[:, 0], requires_grad=False)
         genre_idx = Variable(x[:, 1:26], requires_grad=False)
         director_idx = Variable(x[:, 26:2212], requires_grad=False)
         actor_idx = Variable(x[:, 2212:10242], requires_grad=False)
-        gender_idx = Variable(x[:, 10242], requires_grad=False)
-        age_idx = Variable(x[:, 10243], requires_grad=False)
-        occupation_idx = Variable(x[:, 10244], requires_grad=False)
-        area_idx = Variable(x[:, 10245], requires_grad=False)
+        # gender_idx = Variable(x[:, 10242], requires_grad=False)
+        # age_idx = Variable(x[:, 10243], requires_grad=False)
+        # occupation_idx = Variable(x[:, 10244], requires_grad=False)
+        # area_idx = Variable(x[:, 10245], requires_grad=False)
 
         item_emb = self.item_emb(rate_idx, genre_idx, director_idx, actor_idx)
-        user_emb = self.user_emb(gender_idx, age_idx, occupation_idx, area_idx)
-        x = torch.cat((item_emb, user_emb), 1)
+        # user_emb = self.user_emb(gender_idx, age_idx, occupation_idx, area_idx)
+        x = item_emb
         x = self.fc1(x)
         x = F.relu(x)
         x = self.fc2(x)
+        x = F.relu(x)
+        x = self.fc3(x)
         x = F.relu(x)
         return self.linear_out(x)
 
@@ -68,7 +73,7 @@ class MeLU(torch.nn.Module):
             support_set_y_pred = self.model(support_set_x)
             loss = F.mse_loss(support_set_y_pred, support_set_y.view(-1, 1))
             self.model.zero_grad()
-            grad = torch.autograd.grad(loss, self.model.parameters(), create_graph=True)
+            grad = torch.autograd.grad(loss, self.model.parameters(), create_graph=True, allow_unused=True)
             # local update
             for i in range(self.weight_len):
                 if self.weight_name[i] in self.local_update_target_weight_name:
@@ -80,7 +85,7 @@ class MeLU(torch.nn.Module):
         self.model.load_state_dict(self.keep_weight)
         return query_set_y_pred
 
-    def global_update(self, support_set_xs, support_set_ys, query_set_xs, query_set_ys, num_local_update):
+    def global_update(self, support_set_xs, support_set_ys, query_set_xs, query_set_ys, num_local_update,epoch):
         batch_sz = len(support_set_xs)
         losses_q = []
         if self.use_cuda:
@@ -98,7 +103,8 @@ class MeLU(torch.nn.Module):
         losses_q.backward()
         self.meta_optim.step()
         self.store_parameters()
-        return
+
+        return losses_q
 
     def get_weight_avg_norm(self, support_set_x, support_set_y, num_local_update):
         tmp = 0.
@@ -114,7 +120,7 @@ class MeLU(torch.nn.Module):
             # unit loss
             loss /= torch.norm(loss).tolist()
             self.model.zero_grad()
-            grad = torch.autograd.grad(loss, self.model.parameters(), create_graph=True)
+            grad = torch.autograd.grad(loss, self.model.parameters(), create_graph=True, allow_unused=True)
             for i in range(self.weight_len):
                 # For averaging Forbenius norm.
                 tmp += torch.norm(grad[i])

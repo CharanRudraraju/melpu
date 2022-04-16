@@ -6,7 +6,8 @@ config = {
     'num_actor': 8030,
     'embedding_dim': 32,
     'first_fc_hidden_dim': 64,
-    'second_fc_hidden_dim': 64,
+    'second_fc_hidden_dim': 128,
+    'third_fc_hidden_dim': 64,
     # user
     'num_gender': 2,
     'num_age': 7,
@@ -18,8 +19,8 @@ config = {
     'inner': 1,
     'lr': 5e-5,
     'local_lr': 5e-6,
-    'batch_size': 32,
-    'num_epoch': 20,
+    'batch_size': 16,
+    'num_epoch': 40,
     # candidate selection
     'num_candidate': 20,
 }
